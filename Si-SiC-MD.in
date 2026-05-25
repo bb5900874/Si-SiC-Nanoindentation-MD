@@ -1,0 +1,111 @@
+
+units                   metal
+dimension               3    
+boundary                p p f
+atom_style              atomic
+atom_modify             map hash
+neighbor                2.0 bin
+neigh_modify            delay 5
+newton                  on
+timestep                0.001 
+
+read_data               si-sic.data
+
+
+
+region                  boundary_layer block INF INF INF INF INF 10 units box
+region                  thermostat_layer block INF INF INF INF 10 20  units box
+region                  newtonian_layer block INF INF INF INF 20 INF units box
+
+
+#group                   first region first
+#group                   second region second
+group                   newtonian_layer region newtonian_layer
+group                   thermostat_layer region thermostat_layer
+group                   boundary_layer region boundary_layer
+group                   mobile union thermostat_layer newtonian_layer
+
+region                  vickers_face1 plane 100 100 155 -1 1 2.5    # 第一个斜面
+region                  vickers_face2 plane 100 100 155 1 1 2.5  # 第二个斜面
+region                  vickers_face3 plane 100 100 155 -1 -1 2.5  # 第三个斜面
+region                  vickers_face4 plane 100 100 155 1 -1 2.5  # 第四个斜面
+region                  depth_limit plane 100 100 190 0 0 -1
+region                  asperity intersect 5 vickers_face1 vickers_face2 vickers_face3 vickers_face4 depth_limit
+
+
+lattice                 diamond 3.567
+create_atoms            4 region asperity units box
+group                   asperity region asperity
+write_data              all.data
+
+change_box              all z delta -2 10 units box
+# ------------------------ FORCE FIELDS ------------------------------
+pair_style tersoff
+pair_coeff * * SiC.tersoff C Si Si C
+
+fix                     4 asperity setforce 0.0 0.0 0.0
+fix                     2 boundary_layer   setforce 0.0 0.0 0.0
+
+minimize                1e-10 1e-10 10000 10000
+
+
+#relax
+velocity                mobile create 300 12345 mom yes rot yes
+fix                     1 mobile nvt temp 300 300 0.1
+dump                    equil all custom 1000 equil.lammpstrj id type x y z
+run                     10000
+unfix                   1
+unfix                   4 
+undump                  equil
+
+compute                 mytemp thermostat_layer temp
+#fix                    Force asperity aveforce 0.0 0.0 0.0
+compute                 peatom      all     pe/atom 
+compute                 keatom      all     ke/atom      
+compute                 s           all     stress/atom NULL
+compute                 volatom     all     voronoi/atom
+
+#Defining variables
+variable                misstress atom "sqrt(0.5*((c_s[1]-c_s[2])^2+(c_s[1]-c_s[3])^2+(c_s[2]-c_s[3])^2)+3*(c_s[4]^2+c_s[5]^2+c_s[6]^2))/10000"
+variable                tempatom  atom "7729.4686*c_keatom"
+
+variable                dx equal xcm(asperity,x)
+variable                dy equal xcm(asperity,y)
+variable                dz equal xcm(asperity,z)
+variable                dxo equal ${dx}
+variable                dyo equal ${dy}
+variable                dzo equal ${dz}
+variable                Lx equal "xcm(asperity,x)-v_dxo"
+variable                Ly equal "xcm(asperity,y)-v_dyo"
+variable                Lz equal "xcm(asperity,z)-v_dzo"
+variable                Lzz equal "v_dzo-xcm(asperity,z)"
+#variable               fx equal "f_Force[1]*1.6e-0"   #  MicroNewton  1 ev/A=1.6*10^-9 J/m=1.6*10^-0 nN
+#variable               fy equal "f_Force[2]*1.6e-0"   #  MicroNewton 
+#variable               fz equal "f_Force[3]*1.6e-0"   #  MicroNewton 
+compute			        fx0 asperity reduce sum fx
+compute			        fy0 asperity reduce sum fy
+compute			        fz0 asperity reduce sum fz
+variable 		        fxx equal c_fx0
+variable 		        fyy equal c_fy0
+variable 		        fzz equal c_fz0
+
+
+#indent
+fix                     1 mobile nve
+fix                     3 thermostat_layer langevin 300 300 $(100.0*dt) 89994827 tally yes
+fix_modify              3 temp mytemp
+fix                     5 asperity move linear 0 0 -0.5 units box
+#velocity               asperity set 0 0 -0.5 units box
+
+thermo                  100
+thermo_style            custom step press pe ke temp v_Lz v_Lzz v_fzz
+      
+
+dump                    result all custom 100 yahen0.5test*.cfg id type x y z c_peatom c_volatom[1]  v_misstress 
+
+ 
+
+
+fix                     sscurve all print 100 "${Lx} ${Ly} ${Lz} ${Lzz} ${fxx} ${fyy} ${fzz}" file load0.5dpayahen.txt screen no
+run                     70100
+
