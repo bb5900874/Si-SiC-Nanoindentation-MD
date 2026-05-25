@@ -26,10 +26,12 @@ submitted to *Computational Materials Science*.
 
 ### Input Scripts
 - `Si-SiC-MD.in`: Main LAMMPS input script for nanoindentation simulation
-- `si-sic.data`: Initial atomic configuration of dual-phase Si-SiC system
-
-### Data Files
 - `SiC.tersoff`: Tersoff potential parameters for Si-C system
+
+### Compressed Data Files
+- `si-sic-data.zip`: Initial atomic configuration of dual-phase Si-SiC system
+- Unzip command: `unzip si-sic-data.zip`
+- Contains: `si-sic-data` (30 MB uncompressed)
 
 ## How to Run
 1. Install LAMMPS with the required packages
@@ -39,4 +41,3 @@ submitted to *Computational Materials Science*.
    cd Si-SiC-nanoindentation-LAMMPS
 3. Run the simulation:
    mpiexec -np 4 lmp -in Si-SiC-MD.in
-  
